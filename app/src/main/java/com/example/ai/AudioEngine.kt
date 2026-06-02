@@ -3,6 +3,7 @@ package com.example.ai
 import android.annotation.SuppressLint
 import android.content.Context
 import android.media.*
+import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -10,7 +11,13 @@ import kotlinx.coroutines.flow.SharedFlow
 import java.util.concurrent.LinkedBlockingQueue
 import kotlin.math.sqrt
 
-class AudioEngine(private val context: Context) {
+class AudioEngine(context: Context) {
+    private val context = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        context.createAttributionContext("microphone")
+    } else {
+        context
+    }
+
     private companion object {
         const val TAG = "AudioEngine"
         const val MIC_SAMPLE_RATE = 16000
@@ -55,13 +62,26 @@ class AudioEngine(private val context: Context) {
         val bufferSize = Math.max(minBufSize, CHUNK_SIZE * 4)
 
         try {
-            audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                MIC_SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize
-            )
+            audioRecord = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                AudioRecord.Builder()
+                    .setContext(context)
+                    .setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                    .setAudioFormat(AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(MIC_SAMPLE_RATE)
+                        .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                        .build())
+                    .setBufferSizeInBytes(bufferSize)
+                    .build()
+            } else {
+                AudioRecord(
+                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    MIC_SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    bufferSize
+                )
+            }
 
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
                 Log.e(TAG, "AudioRecord could not be initialized")
